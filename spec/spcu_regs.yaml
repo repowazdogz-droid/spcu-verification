@@ -1,0 +1,88 @@
+# SPCU register map — SINGLE SOURCE OF TRUTH.
+#
+# tools/genregs.py generates ALL of the following from this file:
+#   rtl/spcu_regs.sv              APB3 slave + register file
+#   verif/c/spcu_regs.h           C header for the MMIO driver
+#   verif/pyuvm/spcu_reg_model.py pyuvm-side register model
+#   docs/REGISTERS.md             register documentation
+#
+# Nothing downstream may be hand-edited. Drift between the RTL, the firmware
+# header and the documentation is a real and common IP bug; generating all
+# three from one file removes the failure mode rather than testing for it.
+#
+# priv_write: true  => write requires AMBA pprot[0] == 1 (privileged).
+#                      An unprivileged write is REFUSED and raises pslverr.
+#
+# NOTE ON PRIV_CFG: priv_write MUST remain true. Setting it false is
+# mutation M2 (confused deputy) — it lets the unprivileged side lower the
+# authority requirement that gates every other protected register.
+
+block:
+  name: spcu
+  description: Secure Power Control Unit
+  data_width: 32
+  addr_width: 8
+
+registers:
+  - name: ID
+    offset: 0x00
+    access: RO
+    priv_write: false
+    constant: true
+    reset: 0x53504355   # "SPCU"
+    description: Identification register, constant.
+    fields:
+      - {name: IDCODE, msb: 31, lsb: 0, access: RO, description: "Fixed identification code"}
+
+  - name: CTRL
+    offset: 0x04
+    access: RW
+    priv_write: false
+    reset: 0x00000000
+    description: >
+      Request control. Writing GO submits one DVFS request. Deliberately NOT
+      bus-privileged: any agent may submit a request. Authority is enforced
+      in series at the decision point in spcu_ctrl_fsm, which compares the
+      pprot[0] captured at the GO write against PRIV_CFG.REQUIRE_PRIV and
+      rejects the request. Enforcing at the bus instead would make the
+      register writable-or-not; enforcing at the decision point makes the
+      state change itself the thing that is gated.
+    fields:
+      - {name: TARGET, msb: 1, lsb: 0, access: RW, description: "Requested P-state P0..P3"}
+      - {name: GO,     msb: 8, lsb: 8, access: W1P, description: "Write 1 to submit the request. Self-clearing."}
+
+  - name: STATUS
+    offset: 0x08
+    access: RO
+    priv_write: false
+    reset: 0x00000100
+    description: Controller status. Hardware-driven, read-only from the bus.
+    fields:
+      - {name: CUR_PSTATE, msb: 1,  lsb: 0,  access: RO, description: "Current settled P-state"}
+      - {name: BUSY,       msb: 4,  lsb: 4,  access: RO, description: "A request is in flight"}
+      - {name: DONE,       msb: 5,  lsb: 5,  access: RO, description: "Last request completed successfully"}
+      - {name: ERROR,      msb: 6,  lsb: 6,  access: RO, description: "Last request was rejected"}
+      - {name: PD_ON,      msb: 8,  lsb: 8,  access: RO, description: "Controller power domain is on"}
+      - {name: VOLT,       msb: 11, lsb: 10, access: RO, description: "Current voltage level"}
+      - {name: FREQ,       msb: 13, lsb: 12, access: RO, description: "Current frequency level"}
+
+  - name: LOCK
+    offset: 0x0C
+    access: RW
+    priv_write: true
+    reset: 0x00000000
+    description: When set, all DVFS requests are refused regardless of privilege.
+    fields:
+      - {name: LOCKED, msb: 0, lsb: 0, access: RW, description: "Configuration lock"}
+
+  - name: PRIV_CFG
+    offset: 0x10
+    access: RW
+    priv_write: true
+    reset: 0x00000001
+    description: >
+      Authority configuration. REQUIRE_PRIV selects whether DVFS requests must
+      be privileged. This register gates the authority of every other protected
+      register, so it must itself be privileged-write.
+    fields:
+      - {name: REQUIRE_PRIV, msb: 0, lsb: 0, access: RW, description: "Requests require pprot[0]==1"}

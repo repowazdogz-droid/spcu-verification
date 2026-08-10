@@ -1,0 +1,41 @@
+// Lint waivers. Every waiver carries a justification. A waiver without a
+// reason is a suppressed finding, not a resolved one.
+//
+// (Comment lines in this file must not begin with the tool's own name: it is
+// parsed as a pragma and rejected as BADVLTPRAGMA.)
+
+`verilator_config
+
+// ---------------------------------------------------------------------------
+// CMPCONST on the P1 assertions.
+//
+// NOT A NUISANCE WARNING. The tool is correctly reporting that
+// `st <= S_ACK` and `cur_pstate <= 2'd3` can never be false, because fsm_e
+// occupies all 8 encodings of a 3-bit type and cur_pstate all 4 of a 2-bit
+// type. This is independent confirmation, from a second tool, of the vacuity
+// recorded in docs/LIMITATIONS.md.
+//
+// The assertions are KEPT deliberately, as evidence that a requirement can be
+// faithfully transcribed into an assertion that cannot fail. They are excluded
+// from every claim of assurance. Do not "fix" them by deleting them.
+lint_off -rule CMPCONST -file "*/spcu_props.sv" -match "*limited range*"
+
+// ---------------------------------------------------------------------------
+// SYNCASYNCNET on presetn / srst_n.
+//
+// The property modules use the reset asynchronously for their own bookkeeping
+// registers and synchronously as a guard on the assertions themselves
+// (`if (srst_n) assert ...`), so that no assertion is evaluated while the
+// design is held in reset. That mixture is intentional and confined to the
+// verification collateral. The RTL proper uses async assert / async deassert
+// consistently. Reset behaviour is checked by P4, not by this lint rule.
+lint_off -rule SYNCASYNCNET -file "*/spcu_top.sv"
+
+// ---------------------------------------------------------------------------
+// UNUSEDSIGNAL on pwdata in the GENERATED register file.
+//
+// The APB data bus is 32 bits wide; the register map does not define a field
+// at every bit position, so the unmapped bits are legitimately unread. This is
+// a property of the register map, not a coding defect, and the file is
+// generated so it cannot be annotated at source.
+lint_off -rule UNUSEDSIGNAL -file "*/spcu_regs.sv" -match "*pwdata*"

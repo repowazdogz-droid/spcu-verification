@@ -1,0 +1,53 @@
+[tasks]
+prove       : sync
+bmc         : sync
+cover       : sync
+cdc_bmc     : cdc
+
+[options]
+# k-induction. A PASS here is an UNBOUNDED proof over all reachable states.
+prove:   mode prove
+prove:   depth 30
+
+# Bounded model checking. A PASS here means only "no counterexample within
+# this depth". It is NOT a proof and must never be reported as one.
+bmc:     mode bmc
+bmc:     depth 30
+
+cover:   mode cover
+cover:   depth 90
+
+# clk2fflogic models every flop against arbitrary clock phase, so the two
+# domains are genuinely asynchronous. Induction does not close in this model;
+# BMC is what is honestly available here.
+cdc_bmc: mode bmc
+cdc_bmc: depth 20
+cdc_bmc: multiclock on
+
+[engines]
+# k-induction first; PDR/IC3 as a second unbounded engine for properties
+# that are true but not inductive. Both give UNBOUNDED results.
+sync: smtbmc z3
+prove: abc pdr
+cdc:  smtbmc z3
+
+[script]
+# read_slang, NOT `read -sv`. The builtin Yosys frontend cannot parse this RTL
+# (packages, typedef enum, always_ff, functions in a package). read_slang is a
+# full SystemVerilog frontend; its only relevant gap is concurrent SVA, which
+# is precisely why the properties are restricted to the Tier-A subset.
+sync: read_slang -DSPCU_FV_SYNC=1 --top spcu_fv_top spcu_pkg.sv spcu_sync2.sv spcu_regs.sv spcu_ctrl_fsm.sv spcu_props.sv spcu_props_pclk.sv spcu_top.sv spcu_fv_env.sv spcu_fv_top.sv
+cdc: read_slang --top spcu_fv_top spcu_pkg.sv spcu_sync2.sv spcu_regs.sv spcu_ctrl_fsm.sv spcu_props.sv spcu_props_pclk.sv spcu_top.sv spcu_fv_env.sv spcu_fv_top.sv
+prep -top spcu_fv_top
+cdc: clk2fflogic
+
+[files]
+rtl/spcu_pkg.sv
+rtl/spcu_sync2.sv
+rtl/spcu_regs.sv
+rtl/spcu_ctrl_fsm.sv
+verif/props/spcu_props.sv
+verif/props/spcu_props_pclk.sv
+rtl/spcu_top.sv
+verif/formal/spcu_fv_env.sv
+verif/formal/spcu_fv_top.sv

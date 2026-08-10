@@ -1,0 +1,16 @@
+.venv/
+build/
+__pycache__/
+*.pyc
+verif/formal/spcu_prove/
+verif/formal/spcu_bmc/
+verif/formal/spcu_cover/
+verif/formal/spcu_cdc_bmc/
+verif/pyuvm/sim_build/
+*.vcd
+*.fst
+# Counterexamples under verif/formal/cex/ ARE tracked deliberately: a
+# preserved counterexample is evidence, not a build artefact.
+!verif/formal/cex/**
+verif/formal/spcu/
+verif/pyuvm/results.xml

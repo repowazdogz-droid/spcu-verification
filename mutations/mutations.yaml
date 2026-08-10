@@ -1,0 +1,99 @@
+# Mutation catalogue.
+#
+# Each entry is a realistic RTL defect, injected by exact text substitution so
+# that the mutation is auditable: you can read precisely what changed.
+#
+# The point of the catalogue is NOT to show that the testbench catches bugs.
+# It is to find the bugs it does NOT catch, and to determine whether that is a
+# weakness of the CHECKING or a gap in the SPECIFICATION. Those are different
+# failures with different fixes, and only the second one is interesting.
+#
+# `expect` records the prediction made BEFORE running, so that a surprise is
+# visible as a surprise rather than rationalised afterwards.
+
+mutations:
+
+  - id: M1
+    name: Voltage not lowered on a downward transition
+    class: voltage/frequency sequencing error
+    file: rtl/spcu_ctrl_fsm.sv
+    find: |
+          if (vreq && vack) begin
+            volt_level <= want_v;
+            cur_pstate <= tgt_q;
+    replace: |
+          if (vreq && vack) begin
+            cur_pstate <= tgt_q;
+    expect: >
+      Escapes every [SPEC] property. The part is left at a HIGHER voltage than
+      the P-state requires, which is safe (freq <= volt still holds) but wastes
+      energy. No requirement said the settled voltage must be MINIMAL, only that
+      it must be sufficient. Caught only by P1b, which was added after this
+      mutation was written. This is the specification-adequacy case.
+
+  - id: M2
+    name: Authority register writable by unprivileged agents
+    class: privilege check omitted
+    file: spec/spcu_regs.yaml
+    regen: true
+    find: |
+      - name: PRIV_CFG
+        offset: 0x10
+        access: RW
+        priv_write: true
+    replace: |
+      - name: PRIV_CFG
+        offset: 0x10
+        access: RW
+        priv_write: false
+    expect: >
+      Escapes P3, the property written directly from the privilege requirement.
+      P3 asks "was privilege required and absent", and reads REQUIRE_PRIV to
+      answer -- the very bit this mutation lets the attacker clear. The check
+      passes because the attacker satisfied it. Caught only by P3b, which checks
+      the PROVENANCE of the authority bit rather than the action. This is the
+      confused-deputy case.
+
+  - id: M3
+    name: Stale regulator acknowledge accepted
+    class: stale acknowledgement
+    file: rtl/spcu_ctrl_fsm.sv
+    find: |
+        S_VOLT_UP: begin
+          vreq   <= 1'b1;
+          vlevel <= want_v;
+          if (vreq && vack) begin
+    replace: |
+        S_VOLT_UP: begin
+          vreq   <= 1'b1;
+          vlevel <= want_v;
+          if (vack) begin
+    expect: >
+      Caught by P11. The controller records a voltage the regulator was never
+      asked to supply, so the design's model of the world diverges from the
+      world. Note that P11 had to be ADDED after this mutation escaped every
+      property written about the design's own variables.
+
+  - id: M4
+    name: CDC edge detection replaced by level
+    class: double-processing across a CDC boundary
+    file: rtl/spcu_top.sv
+    find: "  wire req_pulse_s = req_tog_s ^ req_tog_s_d;"
+    replace: "  wire req_pulse_s = req_tog_s;"
+    expect: >
+      Caught by P5. One request produces a request pulse for as long as the
+      toggle is high, so the controller processes it repeatedly. This is the
+      canonical CDC defect and both formal and simulation should see it.
+
+  - id: M5
+    name: Off-by-one in the transition step check
+    class: invalid transition accepted
+    file: rtl/spcu_ctrl_fsm.sv
+    find: "  wire illegal_step = (step > 2'd1);"
+    replace: "  wire illegal_step = (step > 2'd2);"
+    expect: >
+      Caught by P12. A two-step jump is internally CONSISTENT -- voltage still
+      leads frequency, the settled point still matches, the state is still
+      legal -- so it passes every structural property. Only a property that
+      states the step rule itself catches it, and that property had to be added
+      after this mutation escaped.
