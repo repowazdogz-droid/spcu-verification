@@ -1,0 +1,75 @@
+[options]
+# 200 netlist-level mutations, evenly sampled by Yosys.
+size 200
+seed 1
+tags COVERED EQUIV GAP TOOLING
+
+# MUTATE THE DESIGN, NOT THE CHECKERS.
+#
+# The script below elaborates the whole formal testbench, so without this the
+# mutation engine would happily corrupt spcu_props / spcu_props_pclk /
+# spcu_fv_env and report that a broken checker "failed to detect" a mutant.
+# read_slang FLATTENS the hierarchy, so module-based selection matches nothing.
+# Selecting on the source-file attribute instead lands every mutation in RTL
+# and keeps the property set byte-identical across all runs (131 RTL objects
+# selected; 157 property-sourced objects excluded).
+select a:src=*rtl/spcu_*
+
+[script]
+read_slang -DSPCU_FV_SYNC=1 --top spcu_fv_top ../../rtl/spcu_pkg.sv ../../rtl/spcu_sync2.sv ../../rtl/spcu_regs.sv ../../rtl/spcu_ctrl_fsm.sv ../../verif/props/spcu_props.sv ../../verif/props/spcu_props_pclk.sv ../../rtl/spcu_top.sv ../../verif/formal/spcu_fv_env.sv ../../verif/formal/spcu_fv_top.sv
+prep -top spcu_fv_top
+
+[files]
+../../rtl/spcu_pkg.sv
+../../rtl/spcu_sync2.sv
+../../rtl/spcu_regs.sv
+../../rtl/spcu_ctrl_fsm.sv
+../../verif/props/spcu_props.sv
+../../verif/props/spcu_props_pclk.sv
+../../rtl/spcu_top.sv
+../../verif/formal/spcu_fv_env.sv
+../../verif/formal/spcu_fv_top.sv
+
+[logic]
+# test_fm PASS  => the property set did NOT detect this mutant (it survived).
+# test_fm FAIL  => a property fired, so the mutant is covered.
+fm = result("test_fm")   # FAIL => a property fired
+eq = result("test_eq")   # PASS => provably no observable difference
+
+if fm == "FAIL":
+    tag("COVERED")
+elif fm == "PASS" and eq == "PASS":
+    tag("EQUIV")          # survivor, but the mutation changes nothing observable
+elif fm == "PASS" and eq == "FAIL":
+    tag("GAP")            # survivor AND observable -- a real hole
+else:
+    tag("TOOLING")        # could not be evaluated in this flow
+
+[report]
+n_cov  = tags("COVERED")
+n_eq   = tags("EQUIV")
+n_gap  = tags("GAP")
+n_tool = tags("TOOLING")
+total  = n_cov + n_eq + n_gap + n_tool
+print("mutants generated        : %d" % total)
+print("  detected by properties : %d" % n_cov)
+print("  equivalent (no observable difference) : %d" % n_eq)
+print("  SURVIVED AND OBSERVABLE (real gap)    : %d" % n_gap)
+print("  not evaluable in this flow            : %d" % n_tool)
+den = n_cov + n_gap
+if den:
+    print("")
+    print("detection rate over NON-EQUIVALENT, EVALUABLE mutants: %.1f%%" % (100.0 * n_cov / den))
+    print("  denominator %d = %d detected + %d observable survivors" % (den, n_cov, n_gap))
+    print("  excludes %d equivalent and %d unevaluable" % (n_eq, n_tool))
+print("NOTE: survivors are NOT yet classified. Equivalent mutations are")
+print("indistinguishable from genuine gaps at this stage; see")
+print("tools/classify_survivors.py.")
+
+[test test_fm]
+expect PASS FAIL ERROR
+run bash $PRJDIR/test_fm.sh
+
+[test test_eq]
+expect PASS FAIL ERROR
+run bash $PRJDIR/test_eq.sh

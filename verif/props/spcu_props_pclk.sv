@@ -15,7 +15,11 @@ module spcu_props_pclk (
     input logic        pprot0,
     input logic        pslverr,
     input logic        require_priv_q,
-    input logic        lock_q
+    input logic        lock_q,
+    // launch-side payload, for the R18 stability obligation
+    input logic        busy,
+    input logic [1:0]  target_p,
+    input logic        priv_p
 );
 
   localparam logic [7:0] ADDR_LOCK     = 8'h0C;
@@ -61,6 +65,22 @@ module spcu_props_pclk (
     if (presetn) begin
       p8_slverr_on_unpriv:
         assert (!((wr_privcfg || wr_lock) && !pprot0) || pslverr);
+    end
+  end
+
+  // --------------------------------------------------------------- R18 [ADDED]
+  // Launch-side half of the CDC payload obligation: once a request is in
+  // flight, the payload does not move.
+  //
+  // The `$past(busy)` term is load-bearing. On the cycle busy first rises the
+  // payload is being written, so it legitimately differs from its previous
+  // value; the obligation begins once the request is established.
+  always_ff @(posedge pclk) begin
+    if (presetn && $past(presetn)) begin
+      p18a_target_stable:
+        assert (!(busy && $past(busy)) || (target_p == $past(target_p)));
+      p18a_priv_stable:
+        assert (!(busy && $past(busy)) || (priv_p == $past(priv_p)));
     end
   end
 

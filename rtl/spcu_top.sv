@@ -262,7 +262,10 @@ module spcu_top
       .pprot0        (pprot0),
       .pslverr       (pslverr),
       .require_priv_q(priv_cfg_require_priv_q),
-      .lock_q        (lock_locked_q)
+      .lock_q        (lock_locked_q),
+      .busy          (busy_p),
+      .target_p      (target_p),
+      .priv_p        (priv_p)
   );
 
 endmodule

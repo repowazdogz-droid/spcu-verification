@@ -33,7 +33,24 @@ module spcu_fv_top (
     input logic [31:0] pwdata,
     input logic        pprot0,
     input logic        pd_on,
-    input logic        vack
+    input logic        vack,
+
+    // OBSERVABLE OUTPUTS.
+    //
+    // Present so that mutation analysis can build an equivalence miter between
+    // the golden and mutated designs. Without ports, a miter has nothing to
+    // compare and every mutant looks equivalent -- which would have silently
+    // classified all 98 survivors as harmless.
+    //
+    // They carry no assertions and do not affect any proof.
+    output logic [31:0] o_prdata,
+    output logic        o_pready,
+    output logic        o_pslverr,
+    output logic        o_vreq,
+    output logic [1:0]  o_vlevel,
+    output logic [1:0]  o_cur_pstate,
+    output logic [1:0]  o_volt_level,
+    output logic [1:0]  o_freq_level
 );
 
 `ifdef SPCU_FV_SYNC
@@ -83,6 +100,15 @@ module spcu_fv_top (
       .penable(penable),
       .pready (pready)
   );
+
+  assign o_prdata     = prdata;
+  assign o_pready     = pready;
+  assign o_pslverr    = pslverr;
+  assign o_vreq       = vreq;
+  assign o_vlevel     = vlevel;
+  assign o_cur_pstate = cur_pstate;
+  assign o_volt_level = volt_level;
+  assign o_freq_level = freq_level;
 
   // ANCHOR THE INITIAL STATE.
   //

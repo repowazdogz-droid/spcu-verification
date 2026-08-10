@@ -71,21 +71,62 @@ detectable.
 
 ---
 
-## 5. Liveness is not verified
+## 5. Liveness is not verified, and the stack cannot verify it
 
-R13 is a **bounded response** property: an accepted request resolves within 24
-`sclk` cycles under the fairness assumption. This is strictly weaker than
-liveness.
+R13 is a **bounded response** property: an accepted request resolves within 13
+`sclk` cycles under the regulator fairness assumption. This is strictly weaker
+than liveness.
 
-True liveness needs `s_eventually`, which no formal tool in this stack can
-parse. `sby`'s `mode live` was **not probed** — `suprove` is absent from this
-OSS CAD Suite build, so engine availability is an open question, not a settled
-negative.
+The bound is at least **tight** rather than merely sufficient. Swept by
+re-elaborating with `-DSPCU_LATENCY_MAX=N`:
 
-"Accepted requests eventually resolve to DONE or ERROR" is **NOT PROVEN**. A
-bounded approximation of it is.
+| N | result |
+|---|---|
+| 24, 16, 15, 14, 13 | PASS |
+| 12, 10, 9, 8, 7 | FAIL |
 
----
+Worst-case latency is therefore exactly 12 cycles, and 12 is attained. A bound
+that merely passes is a guess; this one is a measurement of the design.
+
+### Three independent blockers, each verified by running it
+
+Phase 2 probed liveness experimentally rather than assuming it was unavailable.
+It is unavailable for three separate reasons, any one of which is sufficient:
+
+**1. It cannot be expressed.** No frontend in this stack parses `s_eventually`:
+
+```
+read_verilog -sv : error
+read_slang       : error: encountered unsupported SVA feature
+```
+
+Yosys's IR *does* have a `$live (A, EN)` cell, so the limitation is in the
+frontends, not the representation. Verific would bridge it and is licence-gated.
+
+**2. The engine is refused.** `sby` supports `mode live`, but:
+
+```
+ERROR: Invalid engine 'smtbmc' for live mode.
+```
+
+Only `aiger suprove` is accepted for liveness.
+
+**3. That engine is absent.** With `aiger suprove` configured:
+
+```
+engine_0: starting process "suprove +simple_liveness model/design_aiger.aig"
+engine_0: finished (returncode=127)
+engine_0: COMMAND NOT FOUND. ERROR.
+```
+
+`suprove` is not shipped in this OSS CAD Suite build. Nor does any other
+installed engine cover liveness: `pono`, `rIC3`, `btormc`, `avy` and `aigbmc`
+are all safety-only — checked, none advertises LTL, fairness or justice.
+
+**The honest claim.** "Accepted requests eventually resolve to DONE or ERROR" is
+**NOT PROVEN and cannot be proven with this toolchain**. What is proven is a
+tight bounded response under a stated fairness assumption. Even installing
+`suprove` would not be sufficient on its own, because blocker 1 would remain.
 
 ## 6. Tool limitations measured on this machine
 
@@ -150,10 +191,15 @@ missing is not just the brand:
 
 - **R16, crossing discipline.** That every crossing uses `spcu_sync2` and a
   toggle is enforced by code review. No tool checks it.
-- **R18, payload stability.** Data-with-handshake is argued from the
-  construction: the payload is written on the same edge that flips the toggle and
-  held until completion. **No property checks it.** This is the weakest link in
-  the CDC argument and the first thing to attack next.
+- **R18 is no longer in this list.** It was the weakest link; Phase 2 formalised
+  it, and formalising it **refuted the design** under independent resets. It is
+  now PROVEN under the R22 integration constraint, with the refutation preserved
+  and reproducible via `make formal-rdc`. What R18 covers is payload
+  **stability**; it does not cover intra-word **bit skew**, which `clk2fflogic`
+  cannot model.
+- **The register read path.** No formal property constrains `prdata`. Read-back
+  correctness rests entirely on simulation. MCY put 42 of 93 surviving mutants in
+  `spcu_regs.sv`, and this is why.
 
 ---
 
@@ -185,3 +231,17 @@ one external check; it is hand-authored, so it is a weak one.
 **This report cannot rule out that further requirements are still missing.**
 That is not modesty. It is the actual epistemic position, and the same argument
 that found S2a and S2b applies to whatever has not been thought of yet.
+
+### Phase 2 measured the size of that blind spot
+
+The hand-authored catalogue was the external check, and it was **authored by the
+same person who wrote the properties**, so it inherited the same blind spot. MCY
+sampled the netlist without that bias and put **45% of its surviving mutants in
+the register file, a region the hand-authored set never touched at all**, while
+only 16% landed in the FSM where every hand-authored mutation lived.
+
+The lesson generalises past this project: **a self-authored adversarial check
+probes the part of the design its author was already thinking about.** It is
+better than no check, and it is not a substitute for one that samples
+independently. The 5/5 figure from Phase 1 was true and it was measuring the
+wrong population.

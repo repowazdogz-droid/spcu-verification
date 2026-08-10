@@ -27,13 +27,16 @@ Three sections:
 | R10 | Policy change mid-flight ignored | formal `prove` | decision-point capture (`auth_ok_q`, `lock_at_accept_q`) | **PROVEN** | **Accepted residual:** an in-flight transition is not aborted by raising `REQUIRE_PRIV` or `LOCK`. Exposure bounded by R13. |
 | R11 | Locked controller still moves | formal `prove` + sim + C | `p9_lock_blocks`; `t_lock_blocks`; `t_lock_refuses` | **PROVEN** | Evaluated at acceptance, per R10. |
 | R12 | Powered-down domain driven | formal `prove` | `p6_pd_off_pstate/volt/freq` | **PROVEN, AMENDED** | Original wording unimplementable; permits one cycle of commit latency after `pd_on` falls. CEX preserved. |
-| R13 | Request hangs | formal `prove` | `p7_bounded_response` | **PROVEN under assumption** | Depends on `a_vack_fairness`. True liveness is **NOT VERIFIED** and cannot be with this stack. |
+| R13 | Request hangs | formal `prove` | `p7_bounded_response` | **PROVEN under assumption, TIGHT** | Depends on `a_vack_fairness`. Bound swept: 13 proves, 12 refuted, so worst case is exactly 12 and is attained. True liveness is **NOT VERIFIED and unverifiable here** — three independent blockers, `docs/LIMITATIONS.md` §5. |
 | R14 | Reset does not reach the safe state | formal `prove` | `p4_reset_safe_state/op/no_vreq` | **PROVEN** | Combinational, so it holds throughout reset, not only at the first edge. |
 | R15 | Asymmetric reset corrupts the handshake | formal `prove` | `p5_no_double_accept` | **PROVEN** | The defect that motivated this requirement was found by formal, unseeded. Fix at `rtl/spcu_top.sv`. |
 | R16 | Pulse missed or double-sampled across the boundary | review + formal `cdc_bmc` | `spcu_sync2` instantiation; `p5_*` under `clk2fflogic` | **BOUNDED** | Structural discipline is enforced by review, **not by a CDC tool**. No open equivalent of Spyglass exists. |
 | R17 | One request commits twice | formal `cdc_bmc` | `p5_no_double_accept`, `p5_no_orphan_ack` | **BOUNDED (depth 20)** | Under arbitrary clock phase via `clk2fflogic`. **This is not a proof.** Induction does not close in the multiclock model. |
-| R18 | Multi-bit payload sampled as a value never driven | review | data-with-handshake construction | **ARGUED, NOT VERIFIED** | No property checks payload stability directly. The weakest link in the CDC argument. |
+| R18a | Payload moves while a request is in flight | formal `prove` | `p18a_target_stable`, `p18a_priv_stable` | **PROVEN** | Launch-side stability. Also holds bounded with free resets (`rdc_freerst`). |
+| R18b | Controller samples a payload that has not settled | formal `prove` | `p18b_target_settled`, `p18b_priv_settled` | **PROVEN under R22** | **REFUTED without R22** — counterexample preserved at `verif/formal/cex/r18_payload_settling/`. Covers stability, NOT intra-word bit skew, which `clk2fflogic` cannot model. |
+| R22 | Register domain resets while the controller domain runs | formal (refutation) | `a_reset_order` assumption | **INTEGRATION CONSTRAINT** | Discovered by formal. No local RTL fix: at the failing instant the synchronised reset has not yet crossed, so no observable signal distinguishes the case. Reproduce with `make formal-rdc`. |
 | R19 | APB protocol violation | formal env + sim + C | `a_apb_*` assumptions; BFM | **CONSTRAINED, NOT CHECKED** | The APB assumptions constrain the *environment*. The DUT's own APB compliance is not independently verified — no protocol checker VIP. |
+| R19b | Register read returns the wrong value | sim only (C driver, SV scoreboard, pyuvm scoreboard) | `t_identity`, `check_after`, `SpcuScoreboard` | **SIMULATION ONLY** | **No formal property constrains `prdata`.** MCY put 42 of 93 observable survivors in `spcu_regs.sv`, the largest cluster being the `prdata` assignment. The single biggest hole in the formal argument. |
 | R20 | Silent refusal | formal `prove` + C | `p8_slverr_on_unpriv` | **PROVEN** | |
 | R21 | RTL / firmware / docs drift | `make check-gen` | `tools/genregs.py --check` | **ENFORCED** | Checks the four generated files match the spec hash. |
 
@@ -56,8 +59,10 @@ Used consistently above and throughout `docs/`.
 | **BOUNDED** | BMC found no counterexample within a stated depth. **Not a proof.** Mutation M1 shows the gap is real: BMC at depth 30 missed a defect that PDR caught. |
 | **VACUOUS** | The property cannot fail on any input. Carries zero information. |
 | **ARGUED, NOT VERIFIED** | Established by construction and review. No tool checks it. |
+| **INTEGRATION CONSTRAINT** | A requirement placed on whoever instantiates the IP, because it cannot be discharged inside it. Belongs in a datasheet. |
 | **CONSTRAINED, NOT CHECKED** | Assumed of the environment rather than verified of the design. |
 | **ENFORCED** | A build step fails if the condition is violated. |
+| **SIMULATION ONLY** | Checked by stimulus that was run, not by any property. Off-stimulus behaviour is unmeasured, not correct. |
 | **NOT VERIFIED** | Stated plainly where a requirement is not covered. |
 
 ---
@@ -81,7 +86,7 @@ experience.
 | JD item | Verdict | Basis, and what is missing |
 |---|---|---|
 | Verilog/SystemVerilog HDL | **COVERED** | ~450 lines of SystemVerilog RTL authored and debugged: packages, typed enums, `always_ff`, parameterised modules, a generated register file. Plus SV testbench classes and constrained randomisation. |
-| Formal verification | **COVERED** | 22 requirement-derived properties, unbounded proofs via k-induction and PDR, a deliberate assumption audit, four counterexample-driven specification corrections, preserved counterexamples. Open-source engines only. |
+| Formal verification | **COVERED** | 26 requirement-derived properties, unbounded proofs via k-induction and PDR, a deliberate assumption audit, five counterexample-driven specification corrections, an integration constraint discovered by refutation (R22), a tight bound established by sweeping, and 200-mutation netlist coverage with equivalence classification. Open-source engines only. **Measured honestly at 47.5% mutation detection**, with the property set shown to be FSM-centric. |
 | UVM | **PARTIALLY COVERED** | Full UVM *architecture* in pyuvm: sequences, sequencer, driver, passive monitor, analysis port, TLM fifo, scoreboard, agent, env, phasing. **No `uvm_pkg`, no SystemVerilog factory, no vendor UVM debug flow, no commercial constraint solver.** No free simulator runs SystemVerilog UVM: Verilator lacks it, Questa Intel Starter gates `randomize()` behind a licence feature, Vivado XSim has no macOS build. This is not commercial SystemVerilog UVM experience. |
 | Power-aware verification | **PARTIALLY COVERED** | Power-domain behaviour (`pd_on`), refusal when off, mid-sequence abort, and the proof that a powered-down domain cannot be driven. Modelled **behaviourally in RTL**. No power intent file, no isolation/retention cell insertion, no power-aware simulation semantics. |
 | UPF power-aware verification | **NOT COVERED** | No open tool consumes IEEE 1801. **Deliberately not written.** An unconsumed UPF file would demonstrate syntax while implying a capability the flow does not have, which is the definition of the CV theatre this project set out to avoid. |

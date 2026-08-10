@@ -1,0 +1,66 @@
+MCY mutants: 200
+
+  COVERED        84
+  EQUIV          23
+  GAP            93
+
+detection over non-equivalent, evaluable mutants: 47.5%  (denominator 177)
+  excluded: 23 equivalent, 0 unevaluable
+
+--- GAP: grouped by originating RTL line and mutation mode ---
+count  mode       source
+    7  const1     rtl/spcu_sync2.sv:24
+    6  cnot0      rtl/spcu_regs.sv:103
+    5  inv        rtl/spcu_sync2.sv:24
+    5  const1     rtl/spcu_regs.sv:76
+    5  inv        rtl/spcu_regs.sv:103
+    4  const1     rtl/spcu_top.sv:206
+    4  const0     rtl/spcu_sync2.sv:24
+    3  const0     rtl/spcu_regs.sv:76
+    3  const1     rtl/spcu_regs.sv:56
+    3  inv        rtl/spcu_regs.sv:65
+    2  const1     rtl/spcu_ctrl_fsm.sv:63
+    2  const1     rtl/spcu_top.sv:135
+    2  const0     rtl/spcu_regs.sv:65
+    2  const0     rtl/spcu_regs.sv:103
+    2  inv        rtl/spcu_top.sv:111
+    2  const1     rtl/spcu_regs.sv:103
+    1  const0     rtl/spcu_top.sv:160
+    1  const0     rtl/spcu_ctrl_fsm.sv:188
+    1  const1     rtl/spcu_top.sv:213
+    1  const1     rtl/spcu_ctrl_fsm.sv:79
+    1  cnot0      rtl/spcu_ctrl_fsm.sv:79
+    1  const0     rtl/spcu_top.sv:213
+    1  const1     rtl/spcu_regs.sv:47
+    1  const1     rtl/spcu_ctrl_fsm.sv:134
+    1  const0     rtl/spcu_regs.sv:66
+    1  cnot1      rtl/spcu_regs.sv:67
+    1  inv        rtl/spcu_top.sv:112
+    1  const1     rtl/spcu_ctrl_fsm.sv:131
+    1  inv        rtl/spcu_regs.sv:68
+    1  const0     rtl/spcu_top.sv:122
+    1  const0     rtl/spcu_top.sv:134
+    1  cnot0      rtl/spcu_regs.sv:76
+    1  inv        rtl/spcu_regs.sv:56
+    1  const1     rtl/spcu_ctrl_fsm.sv:101
+    1  const1     rtl/spcu_regs.sv:69
+    1  const1     rtl/spcu_top.sv:139
+    1  const1     rtl/spcu_ctrl_fsm.sv:65
+    1  inv        rtl/spcu_regs.sv:67
+    1  inv        rtl/spcu_top.sv:122
+    1  const0     rtl/spcu_regs.sv:68
+    1  const1     rtl/spcu_regs.sv:65
+    1  const1     rtl/spcu_ctrl_fsm.sv:121
+    1  const1     rtl/spcu_ctrl_fsm.sv:136
+    1  inv        rtl/spcu_top.sv:125
+    1  inv        rtl/spcu_top.sv:206
+    1  inv        rtl/spcu_ctrl_fsm.sv:101
+    1  const1     rtl/spcu_ctrl_fsm.sv:82
+    1  const0     rtl/spcu_top.sv:111
+    1  const0     rtl/spcu_ctrl_fsm.sv:87
+    1  cnot1      rtl/spcu_ctrl_fsm.sv:64
+    1  cnot0      rtl/spcu_sync2.sv:24
+    1  const0     rtl/spcu_regs.sv:48
+
+Grouping is the input to classification, not the classification.
+The per-group verdicts are recorded in docs/BUGS_FOUND.md.

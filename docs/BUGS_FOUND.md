@@ -287,3 +287,141 @@ and nothing inside the argument could have revealed it.
 
 **Verification completeness is bounded by specification adequacy, and no amount
 of coverage inside an inadequate specification detects the difference.**
+
+
+---
+
+# Phase 2
+
+## S6 — Tightening a bound exposed that formal and simulation were verifying different systems
+
+`p7_bounded_response` originally carried a loose bound of 24 cycles, which was a
+guess that happened to hold. Sweeping it (`-DSPCU_LATENCY_MAX=N`) showed the
+real bound: **13 proves, 12 is refuted**, so worst-case latency is exactly 12
+and is attained.
+
+Setting the tight bound immediately **broke the SystemVerilog testbench**. That
+was correct behaviour and the useful part: the testbench's regulator model was
+slower than the fairness assumption formal had been proving under. Formal
+assumed `vack` within 4 cycles; the testbench sometimes took longer. The loose
+bound had been absorbing the discrepancy and hiding it.
+
+**An assumption made in formal has to be DISCHARGED by the simulation
+environment, not quietly contradicted by it.** A loose bound is not a
+conservative choice; it is a place for inconsistencies to hide.
+
+## B5 / R22 — R18 refuted: a reset window the B1 fix did not close
+
+R18 was previously recorded as ARGUED, NOT VERIFIED. Formalising it refuted it.
+
+`p18b_target_settled` and `p18b_priv_settled` fail in **both** clocking models.
+The counterexample (preserved at `verif/formal/cex/r18_payload_settling/`):
+
+| time | presetn | srst_n | rst_n_p | rst_n_s | busy_p | target_p | priv_p | req_pulse_s |
+|---|---|---|---|---|---|---|---|---|
+| 160 | 1 | 1 | 1 | 1 | 1 | **10** | **1** | 0 |
+| 165 | **0** | 1 | 0 | **1** | 0 | **00** | **0** | **1** |
+
+At t=165 `presetn` falls. `rst_n_p` clears the payload immediately, while
+`rst_n_s` is still high because the reset has not yet crossed. In that same
+instant `req_pulse_s` fires, so the controller consumes a request whose payload
+the source domain has already wiped: it sees P0/unprivileged where P2/privileged
+was launched.
+
+**This is a real residual, and the B1 fix does not cover it.** B1 stopped the
+double *commit*; it did not stop a single commit from being taken against a
+cleared payload.
+
+**Why there is no local RTL fix.** At the failing instant the synchronised pclk
+reset (`presetn_s`) is still high — the information has not arrived — so no
+signal observable in the `sclk` domain distinguishes this case from a legitimate
+request. Closing it inside the IP needs a full reset handshake between domains.
+
+**Resolution: R22, an integration constraint.** The controller domain must be
+held in reset whenever the register domain is. Under it, R18a and R18b are
+PROVEN unbounded by PDR. Without it, R18b is refuted, and that is reproducible
+in one command: `make formal-rdc`, a task that keeps every other property live
+so it also guards the B1 fix against regression.
+
+The reset direction happens to be benign here (payload clears toward P0 and
+unprivileged, the safe values), but the obligation is violated regardless and an
+IP that quietly depends on an unstated integration requirement is a liability.
+
+## S7 — MCY: the property set is FSM-shaped, and so were my mutations
+
+200 netlist-level mutations, sampled evenly by Yosys over the RTL only
+(`select a:src=*rtl/spcu_*`, so the property modules are never mutated). Each
+mutant was run through **both** the property set and an equivalence miter
+against the golden design, so survivors are separated from no-ops.
+
+| outcome | count |
+|---|---|
+| detected by a property | 84 |
+| equivalent (no observable difference within 30 cycles) | 23 |
+| **survived AND observable** | **93** |
+| not evaluable in this flow | 0 |
+
+**Detection rate: 47.5%** over the 177 non-equivalent, evaluable mutants.
+
+### Where the survivors are
+
+| RTL file | surviving observable mutants |
+|---|---|
+| `rtl/spcu_regs.sv` (register file: read mux, write decode) | **42** |
+| `rtl/spcu_top.sv` (status latching, wiring) | 19 |
+| `rtl/spcu_sync2.sv` (synchronisers) | 17 |
+| `rtl/spcu_ctrl_fsm.sv` (the DVFS FSM) | 15 |
+
+**This is the finding.** Only 16% of surviving mutants are in the FSM — and the
+FSM is where **100%** of the five hand-authored mutations were. The hand-authored
+experiment probed the part of the design I was thinking about, reported 5/5
+detection after remediation, and never touched the register read path at all.
+
+MCY, sampling the netlist evenly, put 45% of its surviving mutants there.
+
+### Classification of the 93 survivors
+
+| class | count | basis |
+|---|---|---|
+| **Property gap** — a requirement covers it, no property expresses it | ~61 (`spcu_regs.sv` + `spcu_top.sv` status path) | R19/R20/R21 govern the register interface. Read-back is checked in simulation by the C driver, the SV scoreboard and the pyuvm scoreboard — but **no formal property constrains `prdata` at all**. The single largest cluster (15 mutants) is `spcu_regs.sv:103`, the `prdata` output assignment. |
+| **Specification gap** — no requirement forbids the behaviour | ~17 (`spcu_sync2.sv`) | R16 requires a two-flop synchroniser *structurally*. No requirement states the crossing **latency** or the timing of STATUS updates, so a mutation that keeps the crossing functional but changes its delay violates nothing written down. |
+| **Design-logic residual** | 15 (`spcu_ctrl_fsm.sv`) | The FSM region the properties do target; these are mutations whose effect is observable but not on any path a property watches (for example `vlevel`, which is an output but is constrained by no property). |
+| **Equivalent** | 23 (separate row) | Decided by the miter, not by judgement. |
+| **Unreachable** | not separately counted | Folded into *equivalent*: a mutation whose effect is confined to unreachable states is indistinguishable from an equivalent one at the interface. The harness says so rather than claiming a distinction it cannot make. |
+| **Tooling limitation** | 0 in this sample | Real but not hit here. `mutate -mode inv -port CLK` inverts a clock edge and `prep` then refuses the design (*"also used with opposite polarity, run clk2fflogic instead"*). An earlier 200-mutant run hit exactly one. The harness records it as a third outcome rather than aborting. |
+
+### Denominator honesty
+
+- 200 mutations, seed 1, sampled by Yosys `mutate -list` over 131 RTL-sourced
+  objects. Property-module objects (157) were excluded by construction.
+- The detection rate excludes equivalents, because a mutation that changes
+  nothing observable cannot be "detected" by anything and including it would
+  flatter the number.
+- "Equivalent" means **no observable difference within 30 cycles**, not proved
+  equivalent for all time. `sat -tempinduct` (unbounded) did not converge within
+  10 minutes on this miter. So some of the 23 may be observable later, which
+  would move them into the survivor column and *lower* the detection rate. The
+  bound is stated because it can only bias the number favourably.
+- This is one seed. A different seed samples different cells and would give a
+  different figure; nothing here establishes a confidence interval.
+
+### Three harness defects, each caught by a control rather than by inspection
+
+The equivalence miter was wrong three times, and every time the *identity*
+mutation (`-mode none`, which must be equivalent to itself) reported "not
+equivalent":
+
+1. `chformal -remove` stripped the **assumptions** along with the assertions, so
+   the miter lost its reset anchor and the two copies started from arbitrary
+   independent states.
+2. Without `setundef -init -zero` the initial state was still free.
+3. `sat` needs `async2sync` for this design's asynchronous-reset flops.
+
+Separately, MCY's shipped example scripts use `gawk`, which macOS does not
+provide: the tests ran correctly and recorded **nothing**, and MCY reported
+"0 cached results" while appearing to work.
+
+**A mutation-coverage number is only as good as the identity control.** Had the
+first version been trusted, all 98 survivors of the earlier run would have been
+classified as genuine gaps, because a broken miter says "not equivalent" to
+everything.

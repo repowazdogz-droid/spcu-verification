@@ -63,6 +63,17 @@ module spcu_sv_tb;
   // Responds to vreq after a variable delay, then drops vack when vreq drops.
   // The delay is randomised so the controller is not verified against one
   // convenient regulator latency.
+  //
+  // THE DELAY IS CAPPED TO STAY INSIDE THE FORMAL FAIRNESS ASSUMPTION.
+  // verif/formal/spcu_fv_env.sv assumes vack arrives within VACK_MAX=4 sclk
+  // cycles of vreq, and p7_bounded_response's 13-cycle bound is only valid
+  // under that assumption. When the bound was tightened from a loose 24 to the
+  // measured 13, this testbench started failing p7 -- correctly, because its
+  // regulator was slower than the assumption formal had been proving under.
+  //
+  // Formal and simulation were verifying different systems, and the loose bound
+  // had been hiding it. An assumption made in formal has to be DISCHARGED by
+  // the simulation environment, not quietly contradicted by it.
   int pmic_delay = 2;
   always @(posedge sclk) begin
     if (!srst_n) begin
@@ -275,7 +286,7 @@ module spcu_sv_tb;
         errors++;
         break;
       end
-      pmic_delay = 1 + (i % 4);
+      pmic_delay = 1 + (i % 3);   // <= VACK_MAX, see PMIC model note
       do_request(r.target, r.priv);
     end
   endtask

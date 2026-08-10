@@ -130,39 +130,82 @@ Per-requirement detail is in `docs/TRACEABILITY.md` §1.
 
 ## 4. Mutation coverage
 
-The most decision-relevant coverage measure here, and the least standard.
+The most decision-relevant coverage measure here, and the least standard. Two
+independent experiments, and they disagree in an instructive way.
 
-**Denominator:** 5 catalogued mutations. **Detected by at least one technique:
-5/5.** Detected by formal at BMC depth 30: 4/5. Detected by simulation: 4/5.
+### 4a. Hand-authored catalogue (5 mutations)
 
-But the number that matters is different: **2 of the 5 were undetectable by the
-specification as originally written** (M1 and M5), and one further (M3) was
-undetectable by any property written about the design's own variables. Three of
-five mutations required a *new requirement*, not a new test.
+**Denominator:** 5. Detected by at least one technique after remediation: 5/5.
+Detected by formal at BMC depth 30: 4/5. By simulation: 4/5.
 
-**A mutation score computed against the current property set would read 5/5 and
-would be worthless**, because the property set was amended in response to these
-mutations. The honest score is against the *original* specification: **2/5
-detected**.
+The honest score is against the **original** specification, before the property
+set was amended in response: **2/5**.
 
-That number is the actual finding of this project.
+Five hand-authored mutations are not a sample of anything. They were chosen to
+span the defect classes in the project brief, by the same person who wrote the
+properties, which biases them toward defects that person was already considering.
+
+**Section 4b measures exactly how large that bias was.**
+
+### 4b. MCY netlist mutation coverage (200 mutations)
+
+`make mcy`. Yosys samples 200 mutations evenly over the RTL netlist. Selection
+is restricted to RTL-sourced objects (`select a:src=*rtl/spcu_*`, 131 objects),
+so the property modules (157 objects) are never mutated and the property set is
+byte-identical across all 200 runs.
+
+Each mutant is run through **two** tests: the property set, and an equivalence
+miter against the golden design. The second is what separates a real gap from a
+no-op.
+
+| outcome | count |
+|---|---|
+| detected by a property | 84 |
+| equivalent (no observable difference within 30 cycles) | 23 |
+| **survived and observable** | **93** |
+| not evaluable in this flow | 0 |
+
+**Detection rate: 47.5%**, denominator 177 = 84 detected + 93 observable
+survivors, excluding 23 equivalents.
+
+### Where the survivors are, and why that is the result
+
+| RTL file | observable survivors |
+|---|---|
+| `rtl/spcu_regs.sv` — register file read mux and write decode | **42** |
+| `rtl/spcu_top.sv` — status latching and wiring | 19 |
+| `rtl/spcu_sync2.sv` — synchronisers | 17 |
+| `rtl/spcu_ctrl_fsm.sv` — the DVFS FSM | 15 |
+
+**16% of surviving mutants are in the FSM. 100% of the hand-authored mutations
+were.** The hand-authored experiment reported 5/5 after remediation and never
+touched the register read path; MCY put 45% of its survivors there. The largest
+single cluster — 15 mutants — is `spcu_regs.sv:103`, the `prdata` assignment,
+and **no formal property constrains `prdata` at all**.
+
+Read-back *is* checked, by the C driver, the SV scoreboard and the pyuvm
+scoreboard. It is checked in simulation only, and the mutation experiment is
+what made that visible.
+
+Classification of all 93 is in `docs/BUGS_FOUND.md` §S7.
 
 ### Denominator honesty
 
-Five hand-authored mutations are not a sample of anything. They were chosen to
-span the defect classes named in the project brief (privilege omission,
-off-by-one, stale acknowledge, CDC double-processing, sequencing error), and
-they are a **convenience set authored by the same person who wrote the
-properties**. That is a trusted-base assumption, not evidence: mutations written
-by the author of the checks are biased towards the defects the author was
-already thinking about.
-
-`mcy` (Mutation Cover with Yosys) ships in the OSS CAD Suite and generates
-mutations automatically and impartially. It was **not run** — it is out of the
-agreed Phase 1 scope. Until it is, the mutation figures here describe a
-hand-picked set and no more.
-
----
+- One seed (1). A different seed samples different cells; nothing here
+  establishes a confidence interval.
+- "Equivalent" means **no observable difference within 30 cycles**, not proved
+  equivalent. `sat -tempinduct` did not converge within 10 minutes. Some of the
+  23 may be observable later, which would move them into the survivor column and
+  **lower** the 47.5% figure. The bound can only bias the number favourably, and
+  is stated for that reason.
+- Equivalents are excluded from the denominator because a mutation that changes
+  nothing observable cannot be detected by anything; including them would inflate
+  the rate.
+- The miter compares the observable outputs of `spcu_fv_top`. Behaviour not
+  visible at those ports is out of scope for the equivalence decision.
+- **The identity mutation is the control.** `-mode none` must be equivalent to
+  itself, and three separate harness defects were caught because it was not. See
+  `docs/BUGS_FOUND.md` §S7.
 
 ## 5. Code coverage
 

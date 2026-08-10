@@ -6,6 +6,7 @@ verif/formal/spcu_prove/
 verif/formal/spcu_bmc/
 verif/formal/spcu_cover/
 verif/formal/spcu_cdc_bmc/
+verif/formal/spcu_rdc_freerst/
 verif/pyuvm/sim_build/
 *.vcd
 *.fst
@@ -14,3 +15,8 @@ verif/pyuvm/sim_build/
 !verif/formal/cex/**
 verif/formal/spcu/
 verif/pyuvm/results.xml
+# MCY working state. The config, test scripts and the recorded RESULTS are
+# tracked; the 200 per-mutant task directories and the sqlite working database
+# are regenerable with `make mcy` and are not.
+mutations/mcy/database/
+mutations/mcy/tasks/

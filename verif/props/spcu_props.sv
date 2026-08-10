@@ -254,13 +254,29 @@ module spcu_props
   // ---------------------------------------------------------------- P7 [SPEC]
   // "Accepted requests eventually resolve to DONE or ERROR."
   //
-  // THIS IS NOT LIVENESS. True liveness needs s_eventually, which Yosys cannot
-  // parse. What is proven here is BOUNDED RESPONSE: an accepted request
-  // resolves within LATENCY_MAX sclk cycles. That is a strictly weaker claim
-  // and it is only meaningful under the regulator fairness assumption in
-  // verif/formal/spcu_fv_env.sv. Neither the bound nor the assumption may be
-  // dropped when this result is described.
-  localparam logic [7:0] LATENCY_MAX = 8'd24;
+  // THIS IS NOT LIVENESS. True liveness needs s_eventually, which NO frontend
+  // in this stack parses, and the only sby engine for `mode live` (aiger
+  // suprove) is absent from this build. Both blockers were verified
+  // experimentally; see docs/LIMITATIONS.md.
+  //
+  // What is proven here is BOUNDED RESPONSE: an accepted request resolves
+  // within LATENCY_MAX sclk cycles, under the regulator fairness assumption
+  // in verif/formal/spcu_fv_env.sv. Neither the bound nor the assumption may
+  // be dropped when this result is described.
+  //
+  // THE BOUND IS TIGHT, not merely sufficient. Swept by re-elaborating with
+  // -DSPCU_LATENCY_MAX=N: N=13 proves, N=12 is REFUTED. The worst-case
+  // latency is therefore exactly 12 sclk cycles and that value is attained.
+  // A bound that merely passes would have been a guess; this one is a
+  // measurement of the design.
+  // Overridable so the bound can be swept and shown TIGHT rather than merely
+  // sufficient. A bound that merely passes says "at most 24"; a bound where
+  // N proves and N-1 is refuted says "exactly N", which is a measurement of
+  // the design rather than a guess about it.
+`ifndef SPCU_LATENCY_MAX
+  `define SPCU_LATENCY_MAX 13
+`endif
+  localparam logic [7:0] LATENCY_MAX = 8'd`SPCU_LATENCY_MAX;
 
   always_ff @(posedge sclk) begin
     if (srst_n) begin
@@ -321,6 +337,47 @@ module spcu_props
                     : (($past(cur_pstate) - cur_pstate) == 2'd1)));
     end
   end
+
+  // --------------------------------------------------------------- R18 [ADDED]
+  // CDC PAYLOAD STABILITY -- the obligation that docs/LIMITATIONS.md previously
+  // recorded as ARGUED, NOT VERIFIED.
+  //
+  // The data-with-handshake argument is: the payload is written on the same
+  // pclk edge that flips the request toggle, and held until the transaction
+  // completes, so by the time req_pulse fires on this side it has been stable
+  // for at least the two synchroniser stages. That is an argument. This is the
+  // check.
+  //
+  // Explicit shadow registers rather than $past(x,2), so the depth of the
+  // requirement is visible in the code and matches the synchroniser depth it
+  // is derived from.
+  logic [1:0] tgt_d1, tgt_d2;
+  logic       prv_d1, prv_d2;
+
+  always_ff @(posedge sclk or negedge srst_n) begin
+    if (!srst_n) begin
+      tgt_d1 <= 2'd0; tgt_d2 <= 2'd0;
+      prv_d1 <= 1'b0; prv_d2 <= 1'b0;
+    end else begin
+      tgt_d1 <= req_target; tgt_d2 <= tgt_d1;
+      prv_d1 <= req_priv;   prv_d2 <= prv_d1;
+    end
+  end
+
+  // At the instant this domain samples the payload, it must already have been
+  // stable across the two preceding sclk edges.
+  // Disabled only in the rdc_freerst task, which exists to demonstrate that
+  // this property is exactly what depends on the R22 reset constraint.
+`ifndef SPCU_NO_R18B
+  always_ff @(posedge sclk) begin
+    if (srst_n && $past(srst_n) && $past(srst_n, 2)) begin
+      p18b_target_settled:
+        assert (!req_pulse || ((req_target == tgt_d1) && (req_target == tgt_d2)));
+      p18b_priv_settled:
+        assert (!req_pulse || ((req_priv == prv_d1) && (req_priv == prv_d2)));
+    end
+  end
+`endif
 
   // -------------------------------------------------------------- cover
   // Coverage of the property's own reachability. If these never hit, the

@@ -36,6 +36,36 @@ The properties that catch all three exist **only because the mutations were
 run**. Verification completeness is bounded by specification adequacy, and no
 amount of coverage inside an inadequate specification detects the difference.
 
+## Then the same argument was turned on that experiment
+
+Those five mutations were written by the same person who wrote the properties.
+Phase 2 ran **200 netlist mutations sampled by Yosys**, each checked against the
+property set *and* against an equivalence miter so no-ops are separated out.
+
+| | |
+|---|---|
+| detected by a property | 84 |
+| equivalent (no observable difference) | 23 |
+| **survived and observable** | **93** |
+
+Detection rate **47.5%**. And the survivors are not where the hand-authored
+experiment looked:
+
+| RTL file | survivors |
+|---|---|
+| register file (`spcu_regs.sv`) | **42** |
+| status latching (`spcu_top.sv`) | 19 |
+| synchronisers (`spcu_sync2.sv`) | 17 |
+| the DVFS FSM (`spcu_ctrl_fsm.sv`) | 15 |
+
+**16% of survivors are in the FSM. 100% of the hand-authored mutations were.**
+The largest single cluster is the `prdata` assignment, and no formal property
+constrains `prdata` at all — read-back is verified in simulation only.
+
+A self-authored adversarial check probes the part of the design its author was
+already thinking about. The Phase 1 figure of 5/5 was true, and it was measuring
+the wrong population.
+
 Full analysis: **[docs/BUGS_FOUND.md](docs/BUGS_FOUND.md)**.
 
 ---
@@ -87,6 +117,11 @@ Stated with equal prominence:
   fairness assumption. `s_eventually` is unparseable by every formal tool here.
 - **One assumption was deliberately refused** because writing it would have made
   mutation M3 unfalsifiable.
+- **R18 was refuted when formalised.** It holds only under R22, a stated
+  integration constraint on whoever instantiates the IP; the refutation is
+  reproducible with `make formal-rdc`.
+- **The bounded-response bound is tight**: 13 proves, 12 is refuted, so worst
+  case is exactly 12 cycles and is attained.
 
 Per-requirement detail: **[docs/TRACEABILITY.md](docs/TRACEABILITY.md)**.
 Everything not established: **[docs/LIMITATIONS.md](docs/LIMITATIONS.md)**.

@@ -107,8 +107,14 @@ that powers down *during* a transition aborts that transition with ERROR.
 > exactly one cycle of commit latency after `pd_on` falls. Counterexample
 > preserved at `verif/formal/cex/p6_unsatisfiable/`.
 
-**R13 — Bounded response.** An accepted request resolves within 24 `sclk`
-cycles, **given** that the regulator acknowledges within 4 cycles of a request.
+**R13 — Bounded response [TIGHTENED].** An accepted request resolves within 13
+`sclk` cycles, **given** that the regulator acknowledges within 4 cycles of a
+request.
+
+> The bound is **tight, not merely sufficient**. Swept by re-elaborating with
+> `-DSPCU_LATENCY_MAX=N`: N=13 proves, N=12 is refuted. Worst-case latency is
+> therefore exactly 12 cycles and that value is attained. The original bound of
+> 24 was a guess that happened to hold; this one is a measurement.
 
 > This is **not** a liveness requirement, and the distinction is not pedantic.
 > True liveness ("eventually resolves") requires `s_eventually`, which no open
@@ -141,12 +147,47 @@ wider than the destination period can be seen twice.
 **R17 — No double commit.** One request produces at most one commit. No
 acknowledge may be produced that no request asked for.
 
-**R18 — Payload stability.** Multi-bit payload crossing the boundary is *not*
-synchroniser-per-bit; it is data-with-handshake. The payload is written on the
-same edge that flips the request toggle and held until the transaction
-completes, so it is stable for at least two destination edges before it is
-sampled. Per-bit synchronisation would be worse: the bits would resolve
-independently and could be sampled as a value that was never driven.
+**R18 — Payload stability [NOW CHECKED].** Multi-bit payload crossing the
+boundary is *not* synchroniser-per-bit; it is data-with-handshake. Split into
+two checkable obligations:
+
+- **R18a (launch side).** Once a request is in flight, the payload does not
+  change. Checked by `p18a_target_stable` / `p18a_priv_stable`.
+- **R18b (sampling side).** At the instant the controller samples the payload,
+  it has already been stable across the two preceding `sclk` edges — the
+  synchroniser depth. Checked by `p18b_target_settled` / `p18b_priv_settled`.
+
+> Previously recorded as ARGUED, NOT VERIFIED. It is now verified, and doing so
+> **refuted the design under fully independent resets** — see R22.
+>
+> What remains outside any property: R18 covers payload **stability**, which is
+> the precondition the synchroniser argument needs. It does **not** cover
+> intra-word **bit skew**, because `clk2fflogic` models arbitrary clock phase
+> but not a flop resolving to an intermediate value. Per-bit synchronisation
+> would be worse regardless: the bits would resolve independently and could be
+> sampled as a value that was never driven.
+
+**R22 — Reset ordering [ADDED — an integration constraint on the IP].** The
+controller domain must be held in reset whenever the register domain is:
+`presetn` low implies `srst_n` low.
+
+> **Discovered by formal, not assumed.** Without it, R18b is refuted: `presetn`
+> can clear the launch-side payload while the request toggle is still inside the
+> `sclk` synchroniser, so the controller consumes a request whose payload the
+> source domain has already wiped. Counterexample preserved at
+> `verif/formal/cex/r18_payload_settling/`.
+>
+> **No local RTL fix exists.** At the failing instant the synchronised pclk
+> reset (`presetn_s`) is still high — the reset information has not yet crossed
+> — so no signal observable in the `sclk` domain can distinguish the case.
+> Closing it inside the IP would require a full reset handshake between domains.
+> Stating the requirement on the integrator is the standard alternative and the
+> one taken here.
+>
+> This is a **requirement on anyone instantiating this IP**, and it is the kind
+> of constraint that belongs in a datasheet rather than in a comment. The
+> residual is reproducible in one command:
+> `sby -f verif/formal/spcu.sby rdc_freerst`.
 
 ## 6. Register interface
 

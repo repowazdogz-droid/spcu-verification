@@ -3,6 +3,7 @@ prove       : sync
 bmc         : sync
 cover       : sync
 cdc_bmc     : cdc
+rdc_freerst : cdc
 
 [options]
 # k-induction. A PASS here is an UNBOUNDED proof over all reachable states.
@@ -24,6 +25,14 @@ cdc_bmc: mode bmc
 cdc_bmc: depth 20
 cdc_bmc: multiclock on
 
+# Resets FREE (R22 constraint removed) with R18b disabled. Everything else is
+# still checked, so this task is the standing regression guard for the B1
+# reset-domain-crossing fix -- which was found with free resets and would be
+# masked if every task ran under the R22 constraint.
+rdc_freerst: mode bmc
+rdc_freerst: depth 20
+rdc_freerst: multiclock on
+
 [engines]
 # k-induction first; PDR/IC3 as a second unbounded engine for properties
 # that are true but not inductive. Both give UNBOUNDED results.
@@ -37,7 +46,8 @@ cdc:  smtbmc z3
 # full SystemVerilog frontend; its only relevant gap is concurrent SVA, which
 # is precisely why the properties are restricted to the Tier-A subset.
 sync: read_slang -DSPCU_FV_SYNC=1 --top spcu_fv_top spcu_pkg.sv spcu_sync2.sv spcu_regs.sv spcu_ctrl_fsm.sv spcu_props.sv spcu_props_pclk.sv spcu_top.sv spcu_fv_env.sv spcu_fv_top.sv
-cdc: read_slang --top spcu_fv_top spcu_pkg.sv spcu_sync2.sv spcu_regs.sv spcu_ctrl_fsm.sv spcu_props.sv spcu_props_pclk.sv spcu_top.sv spcu_fv_env.sv spcu_fv_top.sv
+rdc_freerst: read_slang -DSPCU_FREE_RESETS=1 -DSPCU_NO_R18B=1 --top spcu_fv_top spcu_pkg.sv spcu_sync2.sv spcu_regs.sv spcu_ctrl_fsm.sv spcu_props.sv spcu_props_pclk.sv spcu_top.sv spcu_fv_env.sv spcu_fv_top.sv
+cdc_bmc: read_slang --top spcu_fv_top spcu_pkg.sv spcu_sync2.sv spcu_regs.sv spcu_ctrl_fsm.sv spcu_props.sv spcu_props_pclk.sv spcu_top.sv spcu_fv_env.sv spcu_fv_top.sv
 prep -top spcu_fv_top
 cdc: clk2fflogic
 

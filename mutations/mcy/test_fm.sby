@@ -1,0 +1,14 @@
+[options]
+mode bmc
+depth 40
+expect pass,fail
+
+[engines]
+smtbmc z3
+
+[script]
+read_rtlil mutated.il
+prep -top spcu_fv_top
+
+[files]
+mutated.il

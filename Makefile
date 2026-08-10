@@ -26,7 +26,7 @@ SIM   := $(RTL) verif/sv/spcu_sva_tier_b.sv verif/sv/spcu_sv_tb.sv
 VFLAGS := --assert -sv -Wno-fatal verif/verilator.vlt
 
 .PHONY: all setup gen check-gen lint formal formal-prove formal-bmc formal-cover \
-        formal-cdc sim pyuvm ctest mutations clean help
+        formal-cdc formal-rdc sim pyuvm ctest mutations mcy clean help
 
 help:
 	@echo "make setup      create the Python venv and install cocotb/pyuvm/pyyaml"
@@ -38,7 +38,8 @@ help:
 	@echo "make sim        SystemVerilog class-based testbench"
 	@echo "make pyuvm      pyuvm/cocotb UVM-architecture testbench"
 	@echo "make ctest      bare-metal C driver against the RTL"
-	@echo "make mutations  apply the mutation catalogue, print the detection matrix"
+	@echo "make mutations  apply the hand-authored mutation catalogue"
+	@echo "make mcy        netlist mutation coverage with equivalence classification (slow)"
 
 all: check-gen lint formal sim pyuvm ctest mutations
 	@echo
@@ -65,7 +66,7 @@ lint:
 	$(VERILATOR) --lint-only -Wall -Wno-DECLFILENAME $(VFLAGS) $(RTL) --top spcu_top
 	@echo "lint clean (waivers justified in verif/verilator.vlt)"
 
-formal: formal-prove formal-bmc formal-cover formal-cdc
+formal: formal-prove formal-bmc formal-cover formal-cdc formal-rdc
 
 # UNBOUNDED. k-induction and PDR/IC3 race; either returning PASS is a proof.
 formal-prove:
@@ -85,6 +86,13 @@ formal-cover:
 formal-cdc:
 	@echo "=== formal: CDC under arbitrary clock phase (bounded) ==="
 	$(SBY) -f verif/formal/spcu.sby cdc_bmc
+
+# Resets FREE (the R22 integration constraint removed), R18b disabled. This is
+# the standing regression guard for the B1 reset-domain-crossing fix, which was
+# found with free resets and would be masked if every task assumed R22.
+formal-rdc:
+	@echo "=== formal: free resets, R18b off (guards the B1 fix) ==="
+	$(SBY) -f verif/formal/spcu.sby rdc_freerst
 
 sim:
 	@echo "=== simulation: SystemVerilog class-based testbench ==="
@@ -112,8 +120,17 @@ ctest:
 	cc -c -o /dev/null -Iverif/c verif/c/spcu_driver.c && echo "native build OK"
 
 mutations:
-	@echo "=== mutation catalogue ==="
+	@echo "=== hand-authored mutation catalogue ==="
 	$(PY) tools/run_mutations.py
+
+# Netlist-level mutation coverage. 200 mutations sampled by Yosys, each run
+# through BOTH the property set and an equivalence miter, so survivors are
+# separated into "equivalent" and "real gap" rather than lumped together.
+# Long-running; not part of `make all`.
+mcy:
+	@echo "=== MCY: automatic netlist mutation coverage ==="
+	cd mutations/mcy && $(OSS_CAD)/mcy init && $(OSS_CAD)/mcy run -j $$(( $$(sysctl -n hw.ncpu) - 2 ))
+	cd mutations/mcy && $(OSS_CAD)/mcy status
 
 clean:
 	rm -rf build verif/formal/spcu_prove verif/formal/spcu_bmc \

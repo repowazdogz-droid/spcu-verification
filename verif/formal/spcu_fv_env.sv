@@ -52,6 +52,33 @@ module spcu_fv_env #(
     end
   end
 
+  // -------------------------------------------------- reset ordering (R22)
+  //
+  // AN INTEGRATION CONSTRAINT ON THE IP, not a modelling convenience, and it
+  // was DISCOVERED by formal rather than assumed up front.
+  //
+  // With fully independent resets, R18b is REFUTED: presetn can clear the
+  // launch-side payload while the request toggle is still inside the sclk
+  // synchroniser, so the controller consumes a request whose payload the
+  // source domain has already wiped. Counterexample preserved at
+  // verif/formal/cex/r18_payload_settling/.
+  //
+  // No RTL fix is available locally. At the failing instant the synchronised
+  // pclk reset (presetn_s) is STILL HIGH -- the reset information has not yet
+  // crossed -- so no observable signal in the sclk domain can distinguish the
+  // case. Closing it inside the IP would need a full reset handshake between
+  // domains. The standard alternative, and the one taken here, is to state the
+  // requirement on the integrator: the controller domain must be held in reset
+  // whenever the register domain is.
+  //
+  // Kept behind a define so the residual stays reproducible in one command:
+  //   sby -f verif/formal/spcu.sby rdc_freerst   (resets free, R18b disabled)
+`ifndef SPCU_FREE_RESETS
+  always_comb begin
+    a_reset_order: assume (presetn || !srst_n);
+  end
+`endif
+
   // ------------------------------------------------------------ APB3 legality
   // A conforming master. These constrain the ENVIRONMENT, not the DUT: without
   // them the solver invents illegal bus behaviour and reports design bugs that
