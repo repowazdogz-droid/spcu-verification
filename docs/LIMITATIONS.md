@@ -211,9 +211,10 @@ missing is not just the brand:
   X-propagation, no DFT, no UPF.
 - **No metastability modelling.** `clk2fflogic` explores arbitrary clock phase;
   it does not model a flop resolving to an intermediate voltage.
-- **Mutations are hand-authored by the same person who wrote the properties**,
-  which biases them towards defects that person was already considering. `mcy`
-  would generate them impartially and was not run.
+- **The hand-authored mutation catalogue was written by the same person who
+  wrote the properties**, which biases it towards defects that person was
+  already considering. `mcy` samples the netlist impartially and **was run in
+  Phase 2**; §10 records what it measured about that bias.
 
 ---
 

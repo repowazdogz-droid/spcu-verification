@@ -1,0 +1,24 @@
+Elapsed clock time [H:MM:SS (secs)]: 0:01:28 (88)
+Elapsed process time [H:MM:SS (secs)]: 0:01:26 (86)
+engine_0 (smtbmc z3) returned pass
+cover trace: engine_0/trace0.vcd
+cover trace: engine_0/trace0.yw
+  reached cover statement spcu_fv_top.\u_dut.u_props_pclk.c_unpriv_write_refused at spcu_props_pclk.sv:90.7-90.72 step 7
+cover trace: engine_0/trace1.vcd
+cover trace: engine_0/trace1.yw
+  reached cover statement spcu_fv_top.\u_dut.u_props_pclk.c_priv_write_ok at spcu_props_pclk.sv:91.7-91.60 step 7
+cover trace: engine_0/trace2.vcd
+cover trace: engine_0/trace2.yw
+  reached cover statement spcu_fv_top.\u_dut.u_props.c_req_accepted at spcu_props.sv:387.7-387.41 step 10
+cover trace: engine_0/trace3.vcd
+cover trace: engine_0/trace3.yw
+  reached cover statement spcu_fv_top.\u_dut.u_props.c_refused at spcu_props.sv:390.7-390.75 step 12
+cover trace: engine_0/trace4.vcd
+cover trace: engine_0/trace4.yw
+  reached cover statement spcu_fv_top.\u_dut.u_props.c_up_transition at spcu_props.sv:388.7-388.48 step 14
+cover trace: engine_0/trace5.vcd
+cover trace: engine_0/trace5.yw
+  reached cover statement spcu_fv_top.\u_dut.u_props.c_dn_transition at spcu_props.sv:389.7-389.48 step 26
+cover trace: engine_0/trace6.vcd
+cover trace: engine_0/trace6.yw
+  reached cover statement spcu_fv_top.\u_dut.u_props.c_at_p3 at spcu_props.sv:391.7-391.51 step 41

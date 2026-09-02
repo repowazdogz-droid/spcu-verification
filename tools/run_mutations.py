@@ -28,7 +28,10 @@ except ImportError:
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORK = ROOT / "build" / "mut"
-OSS = pathlib.Path("/Users/warre/eda/oss-cad-suite/bin")
+import os
+# Location of the OSS CAD Suite binaries. Override with OSS_CAD=/path/to/oss-cad-suite/bin
+# (the Makefile uses the same variable).
+OSS = pathlib.Path(os.environ.get("OSS_CAD", str(pathlib.Path.home() / "eda" / "oss-cad-suite" / "bin")))
 
 RTL = ["rtl/spcu_pkg.sv", "rtl/spcu_sync2.sv", "rtl/spcu_regs.sv",
        "rtl/spcu_ctrl_fsm.sv", "verif/props/spcu_props.sv",

@@ -1,0 +1,20 @@
+name: formal
+on: [push, pull_request]
+jobs:
+  formal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OSS CAD Suite
+        run: |
+          curl -sSL -o suite.tgz https://github.com/YosysHQ/oss-cad-suite-build/releases/download/2026-08-10/oss-cad-suite-linux-x64-20260810.tgz
+          tar xzf suite.tgz
+          echo "OSS_CAD=$PWD/oss-cad-suite/bin" >> "$GITHUB_ENV"
+      - name: Register map is in sync
+        run: make check-gen
+      - name: Lint
+        run: make OSS_CAD=$OSS_CAD lint
+      - name: Unbounded proof (prove)
+        run: make OSS_CAD=$OSS_CAD formal-prove
+      - name: Bounded checks (bmc, cdc, rdc)
+        run: make OSS_CAD=$OSS_CAD formal-bmc formal-cdc formal-rdc

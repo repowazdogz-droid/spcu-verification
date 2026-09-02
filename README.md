@@ -93,7 +93,7 @@ value the design was entitled to act on, at the instant it was entitled to act.*
 
 | | Result |
 |---|---|
-| **Simulation beat formal** | Mutation M1. BMC at depth 30 found nothing; unbounded PDR caught it immediately. The defect needs a downward transition, first reachable at step 26. **A BMC pass is not a proof**, demonstrated rather than asserted. |
+| **Unbounded formal beat bounded formal** | Mutation M1. BMC at depth 30 found nothing; unbounded PDR caught it immediately. The defect needs a downward transition, first reachable at step 26. **A BMC pass is not a proof**, demonstrated rather than asserted. |
 | **Formal beat simulation** | Mutation M3. The testbench's regulator model never presents a stale acknowledge, so the stimulus simply cannot be generated — no number of random seeds fixes a modelled assumption. Formal finds it because `vack` is left free. |
 | **Both failed** | Mutations M1 and M5 against the original specification. Neither is a checking weakness. See above. |
 
@@ -124,6 +124,28 @@ Stated with equal prominence:
   case is exactly 12 cycles and is attained.
 
 Per-requirement detail: **[docs/TRACEABILITY.md](docs/TRACEABILITY.md)**.
+
+## Evidence on disk
+
+The formal flow was re-run from a clean checkout on 2026-09-02 and every task's
+SymbiYosys status and summary is committed under
+[`verif/formal/results/`](verif/formal/results/) with the engine versions in
+[`docs/TOOLS.md`](docs/TOOLS.md). What each task establishes:
+
+| task | mode | engine | result | what it means |
+|---|---|---|---|---|
+| `prove` | unbounded (k-induction + PDR/IC3) | abc pdr | PASS | the Tier-A assertions hold over all reachable states of the collapsed-clock model |
+| `bmc` | bounded, depth 30 | smtbmc z3 | PASS | no counterexample within 30 cycles; not a proof |
+| `cover` | reachability, depth 90 | smtbmc z3 | PASS | all 7 cover statements reached, traces recorded |
+| `cdc_bmc` | bounded, depth 20, independent clocks | smtbmc z3 | PASS | the CDC claims, bounded only; induction does not close in this model |
+| `rdc_freerst` | bounded, depth 20, free resets | smtbmc z3 | PASS | regression guard for the B1 reset-crossing fix |
+
+The preserved counterexamples under `verif/formal/cex/` are the refutations that
+drove S1 and R18 and are tracked deliberately. The 200-mutant `mcy` run is
+recorded in [`mutations/mcy/RESULTS.txt`](mutations/mcy/RESULTS.txt); the
+hand-authored catalogue with its pre-run predictions is
+[`mutations/mutations.yaml`](mutations/mutations.yaml).
+
 Everything not established: **[docs/LIMITATIONS.md](docs/LIMITATIONS.md)**.
 
 ---
@@ -191,6 +213,10 @@ Verilator 5.051 parses a great deal of it. Both accept immediate assertions with
 ---
 
 ## Running it
+
+Tools: OSS CAD Suite (Yosys, SymbiYosys, Verilator, mcy, Z3), see `docs/TOOLS.md`.
+Point the Makefile and the mutation runner at it with `OSS_CAD=/path/to/oss-cad-suite/bin`
+(default `~/eda/oss-cad-suite/bin`).
 
 ```bash
 make setup     # venv (cocotb requires Python <= 3.13; 3.14 is refused)
