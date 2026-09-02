@@ -99,23 +99,23 @@ Counted from source, not estimated.
 
 | Category | Count |
 |---|---|
-| Tier-A assertions, requirement-derived | 22 |
+| Tier-A assertions, requirement-derived | 26 |
 | Tier-A assertions, auxiliary (proof plumbing, not a requirement) | 1 |
 | Tier-A cover points | 7 |
 | Tier-B assertions (concurrent SVA, simulation only) | 4 |
 | Tier-B cover points | 1 |
 | Environment assumptions | 4 |
 
-Of the 22 requirement-derived Tier-A assertions:
+Of the 26 requirement-derived Tier-A assertions (the four R18 assertions added in Phase 2 included):
 
 | | Count | Note |
 |---|---|---|
-| Informative and **PROVEN** unbounded | 19 | `prove` task returned PASS via PDR, collapsed-clock model |
-| **PROVEN under a named assumption** | 1 | `p7_bounded_response` rests on `a_vack_fairness`; without it the property is false |
+| Informative and **PROVEN** unbounded | 21 | `prove` task returned PASS via PDR, collapsed-clock model |
+| **PROVEN under a named assumption** | 3 | `p7_bounded_response` rests on `a_vack_fairness`; `p18b_target_settled` and `p18b_priv_settled` rest on the R22 integration constraint; each is false without its assumption |
 | **VACUOUS** | 2 | `p1_state_legal`, `p1_pstate_legal` — cannot fail on any input |
 
-**2 of 22 carry no information.** That ratio is reported because a property
-count is otherwise a misleading headline: "22 properties, all passing" would be
+**2 of 26 carry no information.** That ratio is reported because a property
+count is otherwise a misleading headline: "26 properties, all passing" would be
 true and would overstate the assurance by exactly those two.
 
 Every proof also rests on the four APB environment assumptions, so no property

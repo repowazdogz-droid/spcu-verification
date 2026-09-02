@@ -101,15 +101,18 @@ value the design was entitled to act on, at the instant it was entitled to act.*
 
 ## What is actually proven
 
-Of 22 requirement-derived Tier-A assertions, **20 are informative and PROVEN** —
-unbounded, via PDR/IC3, over all reachable states of the collapsed-clock model,
-under the four environment assumptions in `verif/formal/spcu_fv_env.sv`. One of
-the 20 (`p7_bounded_response`) additionally rests on the regulator fairness
-assumption and is false without it.
+Of 26 requirement-derived Tier-A assertions (counted from `verif/props/`, Phase 2
+included), **all 26 pass the `prove` task**: unbounded, via PDR/IC3, over all
+reachable states of the collapsed-clock model, under the four environment
+assumptions in `verif/formal/spcu_fv_env.sv`. **21 are informative and rest on
+nothing further.** `p7_bounded_response` additionally rests on the regulator
+fairness assumption and is false without it. `p18b_target_settled` and
+`p18b_priv_settled` additionally rest on the R22 integration constraint and are
+refuted without it (counterexample preserved).
 
 Stated with equal prominence:
 
-- **2 of the 22 are VACUOUS** and cannot fail on any input. Kept as evidence,
+- **2 of the 26 are VACUOUS** and cannot fail on any input. Kept as evidence,
   excluded from every claim. Verilator independently agrees (`CMPCONST`).
 - **CDC results are BOUNDED at depth 20, not proven.** Induction does not close
   in the multiclock model.
